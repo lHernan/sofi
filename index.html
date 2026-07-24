@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Mundo Sofi – Aprende a programar jugando con tu robot en aventuras de código.">
+  <title>Mundo Sofi 🌟 – Aprende a Programar</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; }
+
+    /* ─── Hub Container ─── */
+    .hub { position: relative; z-index: 1; width: 100%; max-width: 900px; padding: 44px 22px 70px; }
+
+    /* ─── Header ─── */
+    .hub-header { text-align: center; margin-bottom: 52px; }
+
+    .robot-anim {
+      font-size: 4rem;
+      display: inline-block;
+      animation: robotBounce 2.2s ease-in-out infinite;
+      filter: drop-shadow(0 0 22px rgba(167,139,250,.55));
+      margin-bottom: 14px;
+    }
+    @keyframes robotBounce {
+      0%, 100% { transform: translateY(0)   rotate(-4deg); }
+      50%       { transform: translateY(-13px) rotate(4deg); }
+    }
+
+    .hub-title {
+      font-size: clamp(2.4rem, 7vw, 3.8rem);
+      font-weight: 900;
+      background: linear-gradient(135deg, #a78bfa 0%, #f472b6 50%, #60a5fa 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+
+    .hub-sub {
+      font-size: 1.05rem;
+      color: var(--text-mid);
+      margin-bottom: 22px;
+    }
+
+    .progress-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(167,139,250,.1);
+      border: 1px solid rgba(167,139,250,.25);
+      border-radius: 50px;
+      padding: 9px 22px;
+      font-size: 0.9rem; font-weight: 700;
+      color: var(--primary);
+    }
+    .progress-pill .stars { color: var(--yellow); margin-right: 2px; }
+
+    /* ─── Section label ─── */
+    .section-label {
+      font-size: 0.8rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-dim);
+      margin-bottom: 18px;
+    }
+
+    /* ─── Category Grid ─── */
+    .cat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 18px;
+    }
+    @media (max-width: 500px) { .cat-grid { grid-template-columns: 1fr; } }
+
+    /* ─── Category Card ─── */
+    .cat-card {
+      position: relative;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 20px;
+      padding: 22px;
+      display: flex; align-items: center; gap: 18px;
+      text-decoration: none; color: inherit;
+      transition: all 0.3s ease;
+      overflow: hidden;
+    }
+
+    /* Glow layer on hover */
+    .cat-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--c-bg, rgba(167,139,250,.06)) 0%, transparent 65%);
+      opacity: 0; transition: opacity 0.3s;
+      border-radius: 20px;
+    }
+    .cat-card:not(.locked):hover::before { opacity: 1; }
+    .cat-card:not(.locked):hover {
+      transform: translateY(-5px);
+      border-color: var(--c-border, rgba(167,139,250,.35));
+      box-shadow: 0 14px 40px rgba(0,0,0,.35), 0 0 0 1px var(--c-border, rgba(167,139,250,.2));
+    }
+
+    .cat-card.locked { cursor: default; }
+    .cat-card.locked:hover { transform: none; }
+
+    /* Icon bubble */
+    .cat-icon {
+      flex-shrink: 0;
+      width: 66px; height: 66px;
+      border-radius: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.1rem;
+      background: var(--c-icon-bg, rgba(167,139,250,.14));
+      border: 1px solid var(--c-border, rgba(167,139,250,.22));
+      position: relative; z-index: 1;
+      transition: transform 0.3s;
+    }
+    .cat-card:not(.locked):hover .cat-icon { transform: scale(1.1) rotate(-5deg); }
+
+    /* Content */
+    .cat-content { flex: 1; position: relative; z-index: 1; min-width: 0; }
+    .cat-name    { font-size: 1.1rem; font-weight: 900; color: var(--text); margin-bottom: 4px; }
+    .cat-desc    { font-size: 0.84rem; color: var(--text-mid); margin-bottom: 10px; line-height: 1.4; }
+
+    /* Level dots */
+    .cat-dots { display: flex; gap: 6px; }
+    .dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: rgba(255,255,255,.12);
+    }
+    .dot.done    { background: var(--green); }
+    .dot.current { background: var(--c-accent, var(--primary)); box-shadow: 0 0 7px var(--c-accent, var(--primary)); }
+
+    .cat-arrow { color: var(--text-dim); font-size: 1.3rem; position: relative; z-index:1; transition: transform 0.2s; }
+    .cat-card:not(.locked):hover .cat-arrow { transform: translateX(5px); color: var(--text-mid); }
+
+    /* Lock overlay */
+    .lock-overlay {
+      position: absolute; inset: 0;
+      background: rgba(9, 9, 21, 0.55);
+      border-radius: 20px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px;
+      backdrop-filter: blur(3px);
+      z-index: 2;
+    }
+    .lock-icon  { font-size: 1.6rem; }
+    .lock-text  { font-size: 0.78rem; color: var(--text-dim); text-align: center; max-width: 180px; line-height: 1.4; }
+
+    /* Coming soon badge */
+    .soon-badge {
+      position: absolute; top: 14px; right: 14px;
+      background: rgba(255,255,255,.07);
+      color: var(--text-dim);
+      font-size: 0.68rem; font-weight: 800;
+      padding: 3px 9px; border-radius: 20px;
+      z-index: 3; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+
+    /* ─── Footer ─── */
+    .hub-footer {
+      text-align: center; margin-top: 60px;
+      color: var(--text-dim); font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Stars background -->
+  <div class="stars-bg" id="stars"></div>
+
+  <main class="hub">
+
+    <!-- ── Header ── -->
+    <header class="hub-header">
+      <div class="robot-anim">🤖</div>
+      <h1 class="hub-title">Mundo Sofi</h1>
+      <p class="hub-sub">Aprende a programar jugando con tu robot</p>
+      <div class="progress-pill">
+        <span class="stars">⭐</span>
+        <span id="progressText">0 de 7 niveles completados</span>
+      </div>
+    </header>
+
+    <!-- ── Categories ── -->
+    <p class="section-label">🗺️ Elige tu próxima aventura</p>
+    <div class="cat-grid" id="catGrid"></div>
+
+    <footer class="hub-footer">
+      <p>🌟 Completa cada mundo para desbloquear el siguiente · Hecho con ❤️ para Sofi</p>
+    </footer>
+
+  </main>
+
+  <script src="assets/progress.js"></script>
+  <script>
+    // ────────────────────────────────────────────────
+    //  Stars
+    // ────────────────────────────────────────────────
+    (() => {
+      const c = document.getElementById('stars');
+      for (let i = 0; i < 130; i++) {
+        const s = document.createElement('div');
+        s.className = 'star';
+        s.style.cssText = `
+          left: ${Math.random()*100}%;
+          top:  ${Math.random()*100}%;
+          --dur: ${(2 + Math.random()*4).toFixed(1)}s;
+          --dly: ${(-Math.random()*4).toFixed(1)}s;
+          width:  ${(1 + Math.random()*2).toFixed(1)}px;
+          height: ${(1 + Math.random()*2).toFixed(1)}px;
+        `;
+        c.appendChild(s);
+      }
+    })();
+
+    // ────────────────────────────────────────────────
+    //  Category definitions
+    // ────────────────────────────────────────────────
+    const CATS = [
+      {
+        id: 'algoritmos',
+        name: 'Algoritmos',
+        icon: '🤖',
+        desc: 'Dale instrucciones paso a paso a tu robot para llegar a la meta',
+        cBg:     'rgba(139,92,246,.08)',
+        cBorder: 'rgba(139,92,246,.36)',
+        cIconBg: 'rgba(139,92,246,.16)',
+        cAccent: '#a78bfa',
+        total: 3,
+        href: 'apps/algoritmos.html',
+        alwaysOpen: true,
+        hint: null,
+        soon: false,
+      },
+      {
+        id: 'variables',
+        name: 'Variables',
+        icon: '📦',
+        desc: 'Aprende a guardar información: energía, llaves y monedas',
+        cBg:     'rgba(16,185,129,.08)',
+        cBorder: 'rgba(16,185,129,.36)',
+        cIconBg: 'rgba(16,185,129,.16)',
+        cAccent: '#34d399',
+        total: 4,
+        href: 'apps/variables.html',
+        alwaysOpen: false,
+        hint: 'Completa los 3 niveles de Algoritmos',
+        soon: false,
+      },
+      {
+        id: 'condicionales',
+        name: 'Condicionales',
+        icon: '🔀',
+        desc: 'Si pasa esto… entonces haz aquello',
+        cBg:     'rgba(251,146,60,.08)',
+        cBorder: 'rgba(251,146,60,.36)',
+        cIconBg: 'rgba(251,146,60,.16)',
+        cAccent: '#fb923c',
+        total: 4,
+        href: null,
+        alwaysOpen: false,
+        hint: 'Completa Variables para desbloquear',
+        soon: true,
+      },
+      {
+        id: 'bucles',
+        name: 'Bucles',
+        icon: '🔁',
+        desc: 'Repite acciones sin escribir lo mismo mil veces',
+        cBg:     'rgba(96,165,250,.08)',
+        cBorder: 'rgba(96,165,250,.36)',
+        cIconBg: 'rgba(96,165,250,.16)',
+        cAccent: '#60a5fa',
+        total: 4,
+        href: null,
+        alwaysOpen: false,
+        hint: 'Completa Condicionales para desbloquear',
+        soon: true,
+      },
+      {
+        id: 'tipos',
+        name: 'Tipos de Datos',
+        icon: '🎨',
+        desc: 'Números, texto, verdadero/falso… ¡todo tiene un tipo!',
+        cBg:     'rgba(244,114,182,.08)',
+        cBorder: 'rgba(244,114,182,.36)',
+        cIconBg: 'rgba(244,114,182,.16)',
+        cAccent: '#f472b6',
+        total: 4,
+        href: null,
+        alwaysOpen: false,
+        hint: 'Completa Bucles para desbloquear',
+        soon: true,
+      },
+    ];
+
+    // ────────────────────────────────────────────────
+    //  Render
+    // ────────────────────────────────────────────────
+    function render() {
+      const grid = document.getElementById('catGrid');
+      grid.innerHTML = '';
+
+      let totalDone = 0;
+      const totalAll = CATS.reduce((s, c) => s + c.total, 0);
+
+      CATS.forEach(cat => {
+        const unlocked = cat.alwaysOpen || Progress.isUnlocked(cat.id);
+        const done     = Progress.getLevel(cat.id);
+        totalDone += done;
+
+        const card = document.createElement('a');
+        card.href      = (unlocked && cat.href) ? cat.href : '#';
+        card.className = 'cat-card' + (unlocked ? '' : ' locked');
+        card.style.cssText = `
+          --c-bg:      ${cat.cBg};
+          --c-border:  ${cat.cBorder};
+          --c-icon-bg: ${cat.cIconBg};
+          --c-accent:  ${cat.cAccent};
+        `;
+        if (!unlocked || !cat.href) {
+          card.addEventListener('click', e => e.preventDefault());
+        }
+
+        // Level dots
+        let dots = '';
+        for (let i = 1; i <= cat.total; i++) {
+          dots += `<div class="dot${i <= done ? ' done' : i === done+1 ? ' current' : ''}" title="Nivel ${i}"></div>`;
+        }
+
+        card.innerHTML = `
+          ${cat.soon ? '<span class="soon-badge">Próximamente</span>' : ''}
+          <div class="cat-icon">${cat.icon}</div>
+          <div class="cat-content">
+            <div class="cat-name">${cat.name}</div>
+            <div class="cat-desc">${cat.desc}</div>
+            <div class="cat-dots">${dots}</div>
+          </div>
+          <div class="cat-arrow">${(unlocked && !cat.soon) ? '›' : ''}</div>
+        `;
+
+        if (!unlocked) {
+          const overlay = document.createElement('div');
+          overlay.className = 'lock-overlay';
+          overlay.innerHTML = `<div class="lock-icon">🔒</div><div class="lock-text">${cat.hint}</div>`;
+          card.appendChild(overlay);
+        }
+
+        grid.appendChild(card);
+      });
+
+      document.getElementById('progressText').textContent =
+        `${totalDone} de ${totalAll} niveles completados`;
+    }
+
+    render();
+  </script>
+</body>
+</html>

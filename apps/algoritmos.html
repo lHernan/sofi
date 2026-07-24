@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Algoritmos con Robot – Escribe instrucciones paso a paso y mira cómo el robot las ejecuta.">
+  <title>🤖 Algoritmos – Mundo Sofi</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; }
+  </style>
+</head>
+<body>
+  <div class="stars-bg" id="stars"></div>
+
+  <div class="page">
+
+    <!-- ── Top Navigation ── -->
+    <nav class="top-nav">
+      <a href="../index.html" class="btn btn-ghost" id="backBtn">🏠 Inicio</a>
+      <h1><span class="gradient-text">🤖 Algoritmos</span></h1>
+      <div class="level-tabs" id="levelTabs"></div>
+    </nav>
+
+    <!-- ── Game Layout ── -->
+    <div class="game-layout">
+
+      <!-- Left: Editor Panel -->
+      <div class="game-left">
+        <div class="card">
+          <p style="font-size:.9rem;color:var(--text-mid);margin-bottom:12px;" id="levelDesc">Carga de nivel...</p>
+          <textarea class="code-editor" id="code" placeholder="avanzo&#10;giro_derecha&#10;avanzo"></textarea>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="btnRun"   onclick="runAlgorithm()">▶️ Ejecutar</button>
+            <button class="btn btn-yellow"  id="btnRetry" onclick="retryLevel()">⏪ Reintentar</button>
+            <button class="btn btn-ghost"   id="btnNew"   onclick="newMap()">🔄 Nuevo mapa</button>
+          </div>
+          <div style="margin-top:14px;" class="log" id="log">Esperando instrucciones…</div>
+        </div>
+
+        <!-- Help Box -->
+        <div class="help" id="helpBox"></div>
+      </div>
+
+      <!-- Right: Board Panel -->
+      <div class="game-right">
+        <div class="card">
+          <p class="robot-info" id="robotInfo">Posición: (1,1) | Dirección: Este ➡️</p>
+          <div style="margin-top:12px;" class="grid-wrap" id="grid"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Win Celebration ── -->
+  <div class="celebration" id="celebration">
+    <div class="celebration-card">
+      <span class="celebration-emoji" id="celebEmoji">🏆</span>
+      <div class="celebration-title" id="celebTitle">¡Nivel Completado!</div>
+      <div class="celebration-sub"   id="celebSub">¡Excelente algoritmo!</div>
+      <div class="celebration-btns">
+        <button class="btn btn-green"   id="celebNext"   onclick="nextLevel()">Siguiente nivel ›</button>
+        <button class="btn btn-ghost"   onclick="closeCelebration()">Jugar otra vez</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/progress.js"></script>
+  <script>
+    // ═══════════════════════════════════════════════════
+    //  Stars
+    // ═══════════════════════════════════════════════════
+    (() => {
+      const c = document.getElementById('stars');
+      for (let i = 0; i < 100; i++) {
+        const s = document.createElement('div');
+        s.className = 'star';
+        s.style.cssText = `
+          left:${Math.random()*100}%;top:${Math.random()*100}%;
+          --dur:${(2+Math.random()*4).toFixed(1)}s;--dly:${(-Math.random()*4).toFixed(1)}s;
+          width:${(1+Math.random()*2).toFixed(1)}px;height:${(1+Math.random()*2).toFixed(1)}px;
+        `;
+        c.appendChild(s);
+      }
+    })();
+
+    // ═══════════════════════════════════════════════════
+    //  Level Definitions
+    // ═══════════════════════════════════════════════════
+    const GRID = 8;
+    const START = { x: 0, y: 0 };
+    const GOAL  = { x: 7, y: 7 };
+
+    const LEVELS = [
+      {
+        num: 1,
+        name: '🌱 Nivel 1 – Primeros Pasos',
+        desc: 'Aprende a moverte y girar. No hay saltos todavía. ¡Llega a la meta (🏆)!',
+        cmds: ['avanzo', 'giro_derecha', 'giro_izquierda'],
+        types: ['wall'],
+        rate: 0.13,
+        helpExtra: '',
+      },
+      {
+        num: 2,
+        name: '🚀 Nivel 2 – ¡A Saltar!',
+        desc: 'Ahora hay bombas 💥. Usa <strong>saltar</strong> para cruzar por encima.',
+        cmds: ['avanzo', 'giro_derecha', 'giro_izquierda', 'saltar'],
+        types: ['wall', 'bomb'],
+        rate: 0.19,
+        helpExtra: '<li><code>saltar</code> — avanza 2 casillas (salta obstáculos)</li>',
+      },
+      {
+        num: 3,
+        name: '🏆 Nivel 3 – Experto',
+        desc: '¡El mapa más difícil! Usa todo lo que sabes. Completarlo <strong>desbloquea Variables</strong>.',
+        cmds: ['avanzo', 'giro_derecha', 'giro_izquierda', 'saltar'],
+        types: ['wall', 'bomb'],
+        rate: 0.25,
+        helpExtra: '<li><code>saltar</code> — avanza 2 casillas (salta obstáculos)</li>',
+      },
+    ];
+
+    // ═══════════════════════════════════════════════════
+    //  Game State
+    // ═══════════════════════════════════════════════════
+    let currentLevel = Math.min(Progress.getLevel('algoritmos') + 1, LEVELS.length);
+    let robot        = { ...START, dir: 1 }; // dir 0=N 1=E 2=S 3=W
+    let obstacles    = new Map();
+    let running      = false;
+    let errorCellId  = null;
+
+    const DIR_ICONS = ['⬆️','➡️','⬇️','⬅️'];
+    const DIR_NAMES = ['Norte ⬆️','Este ➡️','Sur ⬇️','Oeste ⬅️'];
+    const gridEl    = document.getElementById('grid');
+
+    // ═══════════════════════════════════════════════════
+    //  UI Helpers
+    // ═══════════════════════════════════════════════════
+    function setLog(msg, type) {
+      const el = document.getElementById('log');
+      el.innerHTML = msg;
+      el.className = 'log ' + (type || '');
+    }
+
+    function updateRobotInfo() {
+      document.getElementById('robotInfo').textContent =
+        `Posición: (${robot.x+1}, ${robot.y+1}) | Dirección: ${DIR_NAMES[robot.dir]}`;
+    }
+
+    function renderHelp(lvl) {
+      document.getElementById('helpBox').innerHTML = `
+        <strong>Comandos disponibles:</strong>
+        <ul>
+          <li><code>avanzo</code> — mueve 1 casilla hacia adelante</li>
+          <li><code>giro_derecha</code> — gira 90° a la derecha</li>
+          <li><code>giro_izquierda</code> — gira 90° a la izquierda</li>
+          ${lvl.helpExtra}
+        </ul>
+        <strong>Objetos:</strong> 🏁 Inicio &nbsp; 🧱 Muro &nbsp; ${lvl.types.includes('bomb') ? '💥 Bomba &nbsp; ' : ''}🏆 Meta
+      `;
+    }
+
+    function renderLevelTabs() {
+      const tabs = document.getElementById('levelTabs');
+      tabs.innerHTML = '';
+      LEVELS.forEach(lvl => {
+        const btn = document.createElement('button');
+        const done = Progress.getLevel('algoritmos') >= lvl.num;
+        btn.className = 'level-tab' + (lvl.num === currentLevel ? ' active' : '') + (done ? ' done' : '');
+        btn.textContent = `Nivel ${lvl.num}${done ? ' ✓' : ''}`;
+        btn.onclick = () => switchLevel(lvl.num);
+        tabs.appendChild(btn);
+      });
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Board
+    // ═══════════════════════════════════════════════════
+    function generateObstacles(lvl) {
+      obstacles.clear();
+      const total = Math.floor(GRID * GRID * lvl.rate);
+      let attempts = 0;
+      while (obstacles.size < total && attempts < 5000) {
+        attempts++;
+        const r = Math.floor(Math.random() * GRID);
+        const c = Math.floor(Math.random() * GRID);
+        if ((r === START.y && c === START.x) || (r === GOAL.y && c === GOAL.x)) continue;
+        // Keep the first 2 rows and 2 cols near start mostly clear
+        if (r < 2 && c < 2) continue;
+        const id = `cell-${r}-${c}`;
+        if (!obstacles.has(id)) {
+          const type = lvl.types.length === 1
+            ? lvl.types[0]
+            : lvl.types[Math.floor(Math.random() * lvl.types.length)];
+          obstacles.set(id, type);
+        }
+      }
+    }
+
+    function buildBoard() {
+      gridEl.style.setProperty('--cols', GRID);
+      gridEl.style.setProperty('--rows', GRID);
+      gridEl.innerHTML = '';
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const cell = document.createElement('div');
+          cell.id        = `cell-${r}-${c}`;
+          cell.className = 'cell';
+          if (r === START.y && c === START.x) cell.classList.add('c-start');
+          else if (r === GOAL.y && c === GOAL.x) cell.classList.add('c-goal');
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    function updateBoardUI() {
+      // Reset all cells
+      document.querySelectorAll('.cell').forEach(el => {
+        el.textContent = '';
+        el.classList.remove('c-wall','c-bomb','c-off');
+      });
+
+      // Obstacles
+      obstacles.forEach((type, id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (type === 'bomb') { el.classList.add('c-bomb'); el.textContent = '💥'; }
+        else                 { el.classList.add('c-wall'); el.textContent = '🧱'; }
+      });
+
+      // Start / Goal labels (if robot not on them)
+      const startEl = document.getElementById(`cell-${START.y}-${START.x}`);
+      if (startEl && (robot.x !== START.x || robot.y !== START.y)) startEl.textContent = '🏁';
+
+      const goalEl = document.getElementById(`cell-${GOAL.y}-${GOAL.x}`);
+      if (goalEl && (robot.x !== GOAL.x || robot.y !== GOAL.y)) goalEl.textContent = '🏆';
+
+      // Robot
+      const robEl = document.getElementById(`cell-${robot.y}-${robot.x}`);
+      if (robEl) robEl.textContent = `🤖${DIR_ICONS[robot.dir]}`;
+
+      // Error cell
+      if (errorCellId) {
+        const el = document.getElementById(errorCellId);
+        if (el) el.classList.add('c-off');
+      }
+
+      updateRobotInfo();
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Level Loading
+    // ═══════════════════════════════════════════════════
+    function loadLevel(n) {
+      currentLevel = n;
+      running      = false;
+      errorCellId  = null;
+      robot        = { ...START, dir: 1 };
+
+      const lvl = LEVELS[n - 1];
+      document.getElementById('levelDesc').innerHTML = lvl.desc;
+      document.getElementById('code').value = '';
+      document.getElementById('code').placeholder = 'Escribe tu algoritmo aquí…\navanzo\ngiro_derecha\navanzo';
+
+      generateObstacles(lvl);
+      buildBoard();
+      updateBoardUI();
+      renderHelp(lvl);
+      renderLevelTabs();
+      setLog('Esperando instrucciones…');
+    }
+
+    function switchLevel(n) {
+      const maxPlayable = Math.min(Progress.getLevel('algoritmos') + 1, LEVELS.length);
+      if (n > maxPlayable) return; // locked
+      loadLevel(n);
+    }
+
+    function newMap() {
+      loadLevel(currentLevel);
+      setLog('¡Nuevo mapa generado!', 'status');
+    }
+
+    function retryLevel() {
+      running     = false;
+      errorCellId = null;
+      robot       = { ...START, dir: 1 };
+      updateBoardUI();
+      setLog('Robot devuelto al inicio. ¡Inténtalo de nuevo!', 'status');
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Movement
+    // ═══════════════════════════════════════════════════
+    function moveRobot(steps, lineNumber) {
+      const dx = [0, 1, 0, -1]; // N E S W
+      const dy = [-1, 0, 1, 0];
+      const nx = robot.x + dx[robot.dir] * steps;
+      const ny = robot.y + dy[robot.dir] * steps;
+      const actionName = steps === 2 ? 'saltar' : 'avanzo';
+
+      if (nx < 0 || nx >= GRID || ny < 0 || ny >= GRID) {
+        setLog(`💥 OFF-GRID (línea ${lineNumber}: '${actionName}'): ¡el robot saldría del tablero!`, 'error');
+        errorCellId = `cell-${robot.y}-${robot.x}`;
+        updateBoardUI();
+        running = false;
+        return false;
+      }
+
+      const targetId = `cell-${ny}-${nx}`;
+      if (obstacles.has(targetId)) {
+        const t = obstacles.get(targetId);
+        setLog(`🚧 COLISIÓN (línea ${lineNumber}: '${actionName}'): ¡chocaste con ${t === 'bomb' ? 'una Bomba 💥' : 'un Muro 🧱'}!`, 'error');
+        errorCellId = targetId;
+        updateBoardUI();
+        running = false;
+        return false;
+      }
+
+      robot.x = nx;
+      robot.y = ny;
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Run Algorithm
+    // ═══════════════════════════════════════════════════
+    async function runAlgorithm() {
+      if (running) return;
+      robot       = { ...START, dir: 1 };
+      errorCellId = null;
+      updateBoardUI();
+      await sleep(280);
+      running = true;
+
+      const lvl  = LEVELS[currentLevel - 1];
+      const lines = document.getElementById('code').value.toLowerCase().trim().split('\n');
+      setLog('⚙️ Ejecutando…', 'status');
+
+      for (let i = 0; i < lines.length; i++) {
+        if (!running) return;
+        const cmd = lines[i].trim();
+        if (!cmd) continue;
+
+        // Check if command is available at this level
+        if (!lvl.cmds.includes(cmd)) {
+          setLog(`❌ Error línea ${i+1}: "<strong>${cmd}</strong>" no está disponible en este nivel.`, 'error');
+          running = false;
+          return;
+        }
+
+        await sleep(480);
+
+        if (cmd === 'avanzo') {
+          if (!moveRobot(1, i+1)) return;
+        } else if (cmd === 'saltar') {
+          if (!moveRobot(2, i+1)) return;
+        } else if (cmd === 'giro_derecha') {
+          robot.dir = (robot.dir + 1) % 4;
+        } else if (cmd === 'giro_izquierda') {
+          robot.dir = (robot.dir + 3) % 4;
+        } else {
+          setLog(`❌ Error línea ${i+1}: "<strong>${cmd}</strong>" no existe.`, 'error');
+          running = false;
+          return;
+        }
+
+        updateBoardUI();
+
+        // Check win
+        if (robot.x === GOAL.x && robot.y === GOAL.y) {
+          running = false;
+          levelComplete();
+          return;
+        }
+      }
+
+      if (robot.x === GOAL.x && robot.y === GOAL.y) {
+        levelComplete();
+      } else {
+        setLog('🤔 Algoritmo terminado, pero el robot no llegó a la meta.', 'error');
+      }
+      running = false;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Level Complete
+    // ═══════════════════════════════════════════════════
+    function levelComplete() {
+      Progress.setLevel('algoritmos', currentLevel);
+
+      // Unlock variables after completing level 3
+      if (currentLevel >= 3) {
+        Progress.unlock('variables');
+      }
+
+      const isLast    = currentLevel === LEVELS.length;
+      const unlockMsg = currentLevel === 3 ? '<br>🔓 <strong>¡Variables desbloqueado!</strong>' : '';
+
+      document.getElementById('celebEmoji').textContent  = isLast ? '🏆' : '⭐';
+      document.getElementById('celebTitle').textContent  = isLast ? '¡Eres un experto!' : '¡Nivel completado!';
+      document.getElementById('celebSub').innerHTML      = `¡Excelente algoritmo! Tu robot llegó a la meta.${unlockMsg}`;
+      document.getElementById('celebNext').style.display = isLast ? 'none' : '';
+      document.getElementById('celebration').classList.add('show');
+
+      setLog('🏆 ¡META ALCANZADA!', 'win');
+      renderLevelTabs();
+    }
+
+    function nextLevel() {
+      closeCelebration();
+      if (currentLevel < LEVELS.length) loadLevel(currentLevel + 1);
+    }
+
+    function closeCelebration() {
+      document.getElementById('celebration').classList.remove('show');
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // ═══════════════════════════════════════════════════
+    //  Stars
+    // ═══════════════════════════════════════════════════
+    (() => {
+      const c = document.getElementById('stars');
+      for (let i = 0; i < 100; i++) {
+        const s = document.createElement('div');
+        s.className = 'star';
+        s.style.cssText = `
+          left:${Math.random()*100}%;top:${Math.random()*100}%;
+          --dur:${(2+Math.random()*4).toFixed(1)}s;--dly:${(-Math.random()*4).toFixed(1)}s;
+          width:${(1+Math.random()*2).toFixed(1)}px;height:${(1+Math.random()*2).toFixed(1)}px;
+        `;
+        c.appendChild(s);
+      }
+    })();
+
+    // ─── Init ───
+    loadLevel(Math.min(Progress.getLevel('algoritmos') + 1, LEVELS.length));
+  </script>
+</body>
+</html>

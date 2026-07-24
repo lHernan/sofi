@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Variables – Aprende cómo los programas guardan información como energía, llaves y monedas.">
+  <title>📦 Variables – Mundo Sofi</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; }
+
+    /* ─── Right column: stacked (stats + concept + grid) ─── */
+    .vars-right {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+
+    /* Stat value colour helpers */
+    .e-bar-full   { background: var(--green); }
+    .e-bar-mid    { background: var(--yellow); }
+    .e-bar-low    { background: var(--red); }
+
+    /* ─── Locked-goal indicator ─── */
+    .cell.c-locked-goal {
+      background: rgba(100,116,139,.35);
+      border-color: rgba(100,116,139,.5);
+      animation: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="stars-bg" id="stars"></div>
+
+  <div class="page">
+
+    <!-- ── Top Navigation ── -->
+    <nav class="top-nav">
+      <a href="../index.html" class="btn btn-ghost">🏠 Inicio</a>
+      <h1><span class="gradient-text">📦 Variables</span></h1>
+      <div class="level-tabs" id="levelTabs"></div>
+    </nav>
+
+    <!-- ── Game Layout ── -->
+    <div class="game-layout">
+
+      <!-- LEFT: Editor -->
+      <div class="game-left">
+        <div class="card">
+          <p style="font-size:.88rem;color:var(--text-mid);margin-bottom:12px;" id="levelDesc">Cargando nivel…</p>
+          <textarea class="code-editor" id="code" placeholder="avanzo&#10;giro_derecha&#10;avanzo"></textarea>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="runProgram()">▶️ Ejecutar</button>
+            <button class="btn btn-yellow"  onclick="retryLevel()">⏪ Reintentar</button>
+          </div>
+          <div style="margin-top:14px;" class="log" id="log">Esperando instrucciones…</div>
+        </div>
+
+        <!-- Commands help -->
+        <div class="help" id="helpBox"></div>
+      </div>
+
+      <!-- RIGHT: Stats + Concept + Grid -->
+      <div class="vars-right">
+
+        <!-- Stats Panel -->
+        <div class="card stats-panel" id="statsPanel">
+          <div class="stats-title">🤖 Variables del Robot</div>
+
+          <!-- energia -->
+          <div class="stat-row">
+            <div class="stat-label">⚡ energia</div>
+            <div class="stat-val" id="sv-energia">–</div>
+          </div>
+          <div class="energy-bar-wrap" id="energyBarWrap" style="display:none;">
+            <div class="energy-bar e-bar-full" id="energyBar" style="width:100%"></div>
+          </div>
+
+          <!-- llaves -->
+          <div class="stat-row" id="row-llaves" style="display:none;">
+            <div class="stat-label">🔑 llaves</div>
+            <div class="stat-val" id="sv-llaves">0</div>
+          </div>
+
+          <!-- monedas -->
+          <div class="stat-row" id="row-monedas" style="display:none;">
+            <div class="stat-label">💰 monedas</div>
+            <div class="stat-val" id="sv-monedas">0</div>
+          </div>
+
+        </div>
+
+        <!-- Concept explanation -->
+        <div class="concept-box" id="conceptBox"></div>
+
+        <!-- Board -->
+        <div class="card">
+          <p class="robot-info" id="robotInfo">Posición: (1,1) | Dirección: Este ➡️</p>
+          <div style="margin-top:10px;" class="grid-wrap" id="grid"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Win Celebration ── -->
+  <div class="celebration" id="celebration">
+    <div class="celebration-card">
+      <span class="celebration-emoji">⭐</span>
+      <div class="celebration-title" id="celebTitle">¡Nivel Completado!</div>
+      <div class="celebration-sub"   id="celebSub">¡Fantástico!</div>
+      <div class="celebration-btns">
+        <button class="btn btn-green" id="celebNext" onclick="nextLevel()">Siguiente nivel ›</button>
+        <button class="btn btn-ghost" onclick="closeCelebration()">Jugar otra vez</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../assets/progress.js"></script>
+  <script>
+    // ═══════════════════════════════════════════════════
+    //  Stars
+    // ═══════════════════════════════════════════════════
+    (() => {
+      const c = document.getElementById('stars');
+      for (let i = 0; i < 100; i++) {
+        const s = document.createElement('div');
+        s.className = 'star';
+        s.style.cssText = `
+          left:${Math.random()*100}%;top:${Math.random()*100}%;
+          --dur:${(2+Math.random()*4).toFixed(1)}s;--dly:${(-Math.random()*4).toFixed(1)}s;
+          width:${(1+Math.random()*2).toFixed(1)}px;height:${(1+Math.random()*2).toFixed(1)}px;
+        `;
+        c.appendChild(s);
+      }
+    })();
+
+    // ═══════════════════════════════════════════════════
+    //  Level Definitions  (fixed maps)
+    // ═══════════════════════════════════════════════════
+    // Map format: 2D array [row][col]
+    // Cell values: null | 'apple' | 'key' | 'coin' | 'wall' | 'bomb'
+    // Robot starts at {row:0, col:0} facing East (dir=1)
+
+    const LEVELS = [
+      // ─────────────────────────────────────────────
+      // Level 1 — "¿Qué es una Variable?"
+      // ─────────────────────────────────────────────
+      {
+        num:  1,
+        name: '1 – ¿Qué es una Variable?',
+        desc: 'Una variable guarda un valor. Recoge la 🍎 manzana y mira cómo cambia <code>energia</code>.',
+        grid: 5,
+        goal: { row: 4, col: 4 },
+        energyStart: 5,
+        energyCost: false,       // No energy per move yet
+        needsKey:   false,
+        objects: [
+          { row: 0, col: 2, type: 'apple' }, // right in the path!
+        ],
+        walls: [],
+        bombs: [],
+        concept: '💡 Una <strong>variable</strong> es como una caja con nombre que guarda un valor.<br>Cuando el robot recoge una 🍎 manzana, la variable <code>energia</code> aumenta en <strong>+2</strong>.',
+        showLlaves:  false,
+        showMonedas: false,
+        showEnergyBar: false,
+      },
+      // ─────────────────────────────────────────────
+      // Level 2 — "Las Variables Cambian"
+      // ─────────────────────────────────────────────
+      {
+        num:  2,
+        name: '2 – Las Variables Cambian',
+        desc: 'Cada movimiento cuesta <strong>−1 energia</strong>. ¡Recoge manzanas para no quedarte sin energía!',
+        grid: 6,
+        goal: { row: 5, col: 5 },
+        energyStart: 8,
+        energyCost: true,
+        needsKey: false,
+        objects: [
+          { row: 2, col: 1, type: 'apple' }, // on the way south
+          { row: 3, col: 4, type: 'apple' }, // detour east
+        ],
+        walls: [
+          { row: 1, col: 4 },
+          { row: 4, col: 2 },
+        ],
+        bombs: [],
+        concept: '💡 Las variables <strong>cambian</strong> durante el programa.<br>Cada <code>avanzo</code> hace <code>energia -= 1</code>. Si llega a 0, ¡el robot para!<br>Las manzanas 🍎 dan <strong>+2 energia</strong>.',
+        showLlaves:  false,
+        showMonedas: false,
+        showEnergyBar: true,
+      },
+      // ─────────────────────────────────────────────
+      // Level 3 — "Necesitas una Llave"
+      // ─────────────────────────────────────────────
+      {
+        num:  3,
+        name: '3 – ¡Necesitas una Llave!',
+        desc: 'La meta está cerrada 🔒. Busca la 🔑 llave para poder entrar.',
+        grid: 6,
+        goal: { row: 5, col: 5 },
+        energyStart: 12,
+        energyCost: true,
+        needsKey: true,
+        objects: [
+          { row: 1, col: 4, type: 'apple' },
+          { row: 3, col: 2, type: 'key'   },
+        ],
+        walls: [
+          { row: 2, col: 3 },
+          { row: 4, col: 1 },
+          { row: 4, col: 2 },
+        ],
+        bombs: [],
+        concept: '💡 Puedes tener <strong>varias variables</strong> a la vez.<br>El robot tiene <code>energia</code> y <code>llaves</code>.<br>La meta 🔒 solo se abre cuando <code>llaves &gt;= 1</code>.',
+        showLlaves:  true,
+        showMonedas: false,
+        showEnergyBar: true,
+      },
+      // ─────────────────────────────────────────────
+      // Level 4 — "¡Recoge Todo!"
+      // ─────────────────────────────────────────────
+      {
+        num:  4,
+        name: '4 – ¡Estrategia Total!',
+        desc: 'Llaves para la meta, manzanas para la energía, y monedas como bonus. ¡Planea tu ruta!',
+        grid: 7,
+        goal: { row: 6, col: 6 },
+        energyStart: 14,
+        energyCost: true,
+        needsKey: true,
+        objects: [
+          { row: 1, col: 2, type: 'apple' },
+          { row: 3, col: 1, type: 'key'   },
+          { row: 2, col: 4, type: 'coin'  },
+          { row: 4, col: 3, type: 'coin'  },
+          { row: 4, col: 5, type: 'coin'  },
+          { row: 5, col: 2, type: 'apple' },
+        ],
+        walls: [
+          { row: 1, col: 4 },
+          { row: 3, col: 4 },
+          { row: 5, col: 4 },
+        ],
+        bombs: [
+          { row: 2, col: 3 },
+        ],
+        concept: '💡 Las variables trabajan juntas.<br><code>energia</code> baja con cada paso. <code>llaves</code> te dan acceso a la meta.<br><code>monedas</code> son puntos bonus. ¡Diseña la mejor ruta!',
+        showLlaves:  true,
+        showMonedas: true,
+        showEnergyBar: true,
+      },
+    ];
+
+    // ═══════════════════════════════════════════════════
+    //  Game State
+    // ═══════════════════════════════════════════════════
+    let currentLevelNum = Math.min(Progress.getLevel('variables') + 1, LEVELS.length);
+    let lvl;                    // current LEVELS entry
+    let robot   = {};           // { row, col, dir }
+    let vars    = {};           // { energia, llaves, monedas }
+    let collected = new Set();  // "row-col" of collected objects
+    let running = false;
+
+    const DIR_DX   = [0, 1, 0, -1];  // N E S W  → col delta
+    const DIR_DY   = [-1, 0, 1, 0];  // N E S W  → row delta
+    const DIR_ICON = ['⬆️','➡️','⬇️','⬅️'];
+    const DIR_NAME = ['Norte ⬆️','Este ➡️','Sur ⬇️','Oeste ⬅️'];
+
+    const gridEl = document.getElementById('grid');
+
+    // ═══════════════════════════════════════════════════
+    //  Map helpers
+    // ═══════════════════════════════════════════════════
+    function cellId(r, c)     { return `vc-${r}-${c}`; }
+    function cellEl(r, c)     { return document.getElementById(cellId(r,c)); }
+
+    function getObjectAt(r, c) {
+      if (collected.has(`${r}-${c}`)) return null;
+      return lvl.objects.find(o => o.row === r && o.col === c) || null;
+    }
+
+    function isWall(r, c) { return lvl.walls.some(w => w.row === r && w.col === c); }
+    function isBomb(r, c) { return lvl.bombs.some(b => b.row === r && b.col === c); }
+    function isGoal(r, c) { return r === lvl.goal.row && c === lvl.goal.col; }
+
+    // ═══════════════════════════════════════════════════
+    //  UI rendering
+    // ═══════════════════════════════════════════════════
+    function setLog(msg, type) {
+      const el = document.getElementById('log');
+      el.innerHTML = msg;
+      el.className = 'log ' + (type || '');
+    }
+
+    function updateStats(newVars, oldVars) {
+      ['energia','llaves','monedas'].forEach(k => {
+        const el = document.getElementById(`sv-${k}`);
+        if (!el) return;
+        el.textContent = newVars[k];
+        if (newVars[k] !== oldVars[k]) {
+          el.classList.remove('up','down');
+          void el.offsetWidth; // force reflow
+          el.classList.add(newVars[k] > oldVars[k] ? 'up' : 'down');
+          setTimeout(() => el.classList.remove('up','down'), 500);
+        }
+      });
+
+      // Energy bar
+      if (lvl.showEnergyBar) {
+        const pct  = Math.max(0, newVars.energia / lvl.energyStart * 100);
+        const bar  = document.getElementById('energyBar');
+        bar.style.width = pct + '%';
+        bar.className = 'energy-bar ' + (pct > 55 ? 'e-bar-full' : pct > 25 ? 'e-bar-mid' : 'e-bar-low');
+      }
+    }
+
+    function showFloatPopup(r, c, text, positive) {
+      const el = cellEl(r, c);
+      if (!el) return;
+      const popup = document.createElement('div');
+      popup.className = 'float-popup ' + (positive ? 'pos' : 'neg');
+      popup.textContent = text;
+      el.appendChild(popup);
+      setTimeout(() => popup.remove(), 900);
+    }
+
+    function buildBoard() {
+      const G = lvl.grid;
+      gridEl.style.setProperty('--cols', G);
+      gridEl.style.setProperty('--rows', G);
+      gridEl.innerHTML = '';
+
+      for (let r = 0; r < G; r++) {
+        for (let c = 0; c < G; c++) {
+          const cell = document.createElement('div');
+          cell.id        = cellId(r, c);
+          cell.className = 'cell';
+          if (r === 0 && c === 0)              cell.classList.add('c-start');
+          else if (isGoal(r, c))               cell.classList.add('c-goal');
+          else if (isWall(r, c))               cell.classList.add('c-wall');
+          else if (isBomb(r, c))               cell.classList.add('c-bomb');
+          gridEl.appendChild(cell);
+        }
+      }
+    }
+
+    function updateBoard() {
+      const G = lvl.grid;
+
+      for (let r = 0; r < G; r++) {
+        for (let c = 0; c < G; c++) {
+          const el = cellEl(r, c);
+          if (!el) continue;
+
+          // ── Robot ──
+          if (r === robot.row && c === robot.col) {
+            el.className   = 'cell';
+            el.textContent = `🤖${DIR_ICON[robot.dir]}`;
+            continue;
+          }
+
+          // ── Goal ──
+          if (isGoal(r, c)) {
+            const locked = lvl.needsKey && vars.llaves < 1;
+            el.className   = 'cell ' + (locked ? 'c-locked-goal' : 'c-goal');
+            el.textContent = locked ? '🔒' : '🏆';
+            continue;
+          }
+
+          // ── Start ──
+          if (r === 0 && c === 0) {
+            el.className   = 'cell c-start';
+            el.textContent = '🏁';
+            continue;
+          }
+
+          // ── Walls ──
+          if (isWall(r, c)) {
+            el.className   = 'cell c-wall';
+            el.textContent = '🧱';
+            continue;
+          }
+
+          // ── Bombs ──
+          if (isBomb(r, c)) {
+            el.className   = 'cell c-bomb';
+            el.textContent = '💥';
+            continue;
+          }
+
+          // ── Collectibles ──
+          const obj = getObjectAt(r, c);
+          if (obj) {
+            const emojis   = { apple:'🍎', key:'🔑', coin:'💰' };
+            const animCls  = { apple:' c-apple', key:' c-key', coin:' c-coin' };
+            el.className   = 'cell' + (animCls[obj.type] || '');
+            el.textContent = emojis[obj.type];
+          } else {
+            el.className   = 'cell';
+            el.textContent = '';
+          }
+        }
+      }
+
+      document.getElementById('robotInfo').textContent =
+        `Posición: (${robot.col+1},${robot.row+1}) | Dirección: ${DIR_NAME[robot.dir]}`;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Stats panel setup per level
+    // ═══════════════════════════════════════════════════
+    function setupStatsPanel() {
+      document.getElementById('energyBarWrap').style.display = lvl.showEnergyBar ? 'block' : 'none';
+      document.getElementById('row-llaves').style.display    = lvl.showLlaves    ? 'flex'  : 'none';
+      document.getElementById('row-monedas').style.display   = lvl.showMonedas   ? 'flex'  : 'none';
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Level Loading
+    // ═══════════════════════════════════════════════════
+    function loadLevel(n) {
+      currentLevelNum = n;
+      lvl             = LEVELS[n - 1];
+      running         = false;
+      collected       = new Set();
+
+      robot = { row: 0, col: 0, dir: 1 };
+      vars  = { energia: lvl.energyStart, llaves: 0, monedas: 0 };
+
+      document.getElementById('levelDesc').innerHTML = lvl.desc;
+      document.getElementById('code').value          = '';
+      document.getElementById('conceptBox').innerHTML = lvl.concept;
+
+      setupStatsPanel();
+      updateStats(vars, vars);
+      renderHelp();
+      renderLevelTabs();
+      buildBoard();
+      updateBoard();
+      setLog('Esperando instrucciones…');
+    }
+
+    function switchLevel(n) {
+      const maxPlay = Math.min(Progress.getLevel('variables') + 1, LEVELS.length);
+      if (n > maxPlay) return;
+      loadLevel(n);
+    }
+
+    function retryLevel() {
+      running   = false;
+      collected = new Set();
+      robot     = { row: 0, col: 0, dir: 1 };
+      vars      = { energia: lvl.energyStart, llaves: 0, monedas: 0 };
+      updateStats(vars, vars);
+      buildBoard();
+      updateBoard();
+      setLog('Robot devuelto al inicio. ¡Inténtalo de nuevo!', 'status');
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Help Box
+    // ═══════════════════════════════════════════════════
+    function renderHelp() {
+      document.getElementById('helpBox').innerHTML = `
+        <strong>Comandos:</strong>
+        <ul>
+          <li><code>avanzo</code> — mueve 1 casilla hacia adelante${lvl.energyCost ? ' <em>(−1 energia)</em>' : ''}</li>
+          <li><code>giro_derecha</code> — gira 90° a la derecha</li>
+          <li><code>giro_izquierda</code> — gira 90° a la izquierda</li>
+        </ul>
+        <strong>Objetos:</strong>
+        🍎 +2 energia &nbsp;
+        ${lvl.showLlaves  ? '🔑 +1 llave &nbsp;' : ''}
+        ${lvl.showMonedas ? '💰 +1 moneda &nbsp;' : ''}
+        🧱 Muro &nbsp; 💥 Bomba
+      `;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Level Tabs
+    // ═══════════════════════════════════════════════════
+    function renderLevelTabs() {
+      const tabs    = document.getElementById('levelTabs');
+      const maxPlay = Math.min(Progress.getLevel('variables') + 1, LEVELS.length);
+      tabs.innerHTML = '';
+      LEVELS.forEach(l => {
+        const done   = Progress.getLevel('variables') >= l.num;
+        const locked = l.num > maxPlay;
+        const btn    = document.createElement('button');
+        btn.className = 'level-tab'
+          + (l.num === currentLevelNum ? ' active' : '')
+          + (done   ? ' done' : '')
+          + (locked ? ' locked-tab' : '');
+        btn.textContent = `Nivel ${l.num}${done ? ' ✓' : ''}`;
+        if (!locked) btn.onclick = () => switchLevel(l.num);
+        tabs.appendChild(btn);
+      });
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Run Program
+    // ═══════════════════════════════════════════════════
+    async function runProgram() {
+      if (running) return;
+
+      // Reset robot and vars
+      collected = new Set();
+      robot     = { row: 0, col: 0, dir: 1 };
+      vars      = { energia: lvl.energyStart, llaves: 0, monedas: 0 };
+      updateStats(vars, vars);
+      buildBoard();
+      updateBoard();
+      await sleep(280);
+      running = true;
+
+      const lines = document.getElementById('code').value.toLowerCase().trim().split('\n');
+      setLog('⚙️ Ejecutando…', 'status');
+
+      for (let i = 0; i < lines.length; i++) {
+        if (!running) return;
+        const cmd = lines[i].trim();
+        if (!cmd) continue;
+
+        await sleep(500);
+
+        if (cmd === 'avanzo') {
+          if (!doMove(1, i+1)) return;
+        } else if (cmd === 'giro_derecha') {
+          robot.dir = (robot.dir + 1) % 4;
+        } else if (cmd === 'giro_izquierda') {
+          robot.dir = (robot.dir + 3) % 4;
+        } else {
+          setLog(`❌ Error línea ${i+1}: "<strong>${cmd}</strong>" no existe.`, 'error');
+          running = false;
+          return;
+        }
+
+        // Check win after every step
+        if (robot.row === lvl.goal.row && robot.col === lvl.goal.col) {
+          if (lvl.needsKey && vars.llaves < 1) {
+            setLog('🔒 ¡Necesitas al menos 1 llave para abrir la meta!', 'error');
+            running = false;
+            return;
+          }
+          running = false;
+          levelComplete();
+          return;
+        }
+
+        updateBoard();
+      }
+
+      // Final check after all commands
+      if (robot.row === lvl.goal.row && robot.col === lvl.goal.col) {
+        if (lvl.needsKey && vars.llaves < 1) {
+          setLog('🔒 ¡Necesitas al menos 1 llave para abrir la meta!', 'error');
+        } else {
+          levelComplete();
+        }
+      } else {
+        setLog('🤔 Programa terminado, pero el robot no llegó a la meta.', 'error');
+      }
+      running = false;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Movement & Collision
+    // ═══════════════════════════════════════════════════
+    function doMove(steps, lineNum) {
+      const nr = robot.row + DIR_DY[robot.dir] * steps;
+      const nc = robot.col + DIR_DX[robot.dir] * steps;
+      const G  = lvl.grid;
+
+      // Off-grid
+      if (nr < 0 || nr >= G || nc < 0 || nc >= G) {
+        setLog(`💥 OFF-GRID (línea ${lineNum}): ¡el robot saldría del tablero!`, 'error');
+        running = false;
+        return false;
+      }
+
+      // Wall
+      if (isWall(nr, nc)) {
+        setLog(`🧱 COLISIÓN (línea ${lineNum}): ¡hay un muro en (${nc+1},${nr+1})!`, 'error');
+        running = false;
+        return false;
+      }
+
+      // Bomb
+      if (isBomb(nr, nc)) {
+        setLog(`💥 EXPLOSIÓN (línea ${lineNum}): ¡el robot tocó una bomba!`, 'error');
+        running = false;
+        return false;
+      }
+
+      // Move robot
+      robot.row = nr;
+      robot.col = nc;
+
+      // Energy cost per move
+      const old = { ...vars };
+      if (lvl.energyCost) {
+        vars.energia--;
+        if (vars.energia <= 0) {
+          vars.energia = 0;
+          updateStats(vars, old);
+          updateBoard();
+          setLog('⚡ ¡Sin energía! El robot se para. Recoge más 🍎 manzanas.', 'error');
+          running = false;
+          return false;
+        }
+        updateStats(vars, old);
+      }
+
+      // Check collectibles
+      const obj = getObjectAt(nr, nc);
+      if (obj) {
+        const before = { ...vars };
+        collected.add(`${nr}-${nc}`);
+
+        switch (obj.type) {
+          case 'apple':
+            vars.energia = Math.min(vars.energia + 2, lvl.energyStart + 4);
+            showFloatPopup(nr, nc, '+2 ⚡', true);
+            setLog(`🍎 ¡Recogiste una manzana! <code>energia = ${vars.energia}</code>`, 'status');
+            break;
+          case 'key':
+            vars.llaves++;
+            showFloatPopup(nr, nc, '+1 🔑', true);
+            setLog(`🔑 ¡Recogiste una llave! <code>llaves = ${vars.llaves}</code>`, 'status');
+            break;
+          case 'coin':
+            vars.monedas++;
+            showFloatPopup(nr, nc, '+1 💰', true);
+            setLog(`💰 ¡Moneda recogida! <code>monedas = ${vars.monedas}</code>`, 'status');
+            break;
+        }
+        updateStats(vars, before);
+      }
+
+      updateBoard();
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Level Complete
+    // ═══════════════════════════════════════════════════
+    function levelComplete() {
+      Progress.setLevel('variables', currentLevelNum);
+      const isLast = currentLevelNum === LEVELS.length;
+
+      let sub = `¡Llegaste a la meta con ${vars.energia} de energía!`;
+      if (vars.monedas > 0) sub += ` Recogiste ${vars.monedas} 💰.`;
+      if (isLast) sub += '<br>🌟 ¡Completaste el mundo de Variables!';
+
+      document.getElementById('celebTitle').textContent = isLast ? '🏆 ¡Experta en Variables!' : '⭐ ¡Nivel Completado!';
+      document.getElementById('celebSub').innerHTML = sub;
+      document.getElementById('celebNext').style.display = isLast ? 'none' : '';
+      document.getElementById('celebration').classList.add('show');
+      setLog('🏆 ¡META ALCANZADA!', 'win');
+      renderLevelTabs();
+    }
+
+    function nextLevel() {
+      closeCelebration();
+      if (currentLevelNum < LEVELS.length) loadLevel(currentLevelNum + 1);
+    }
+
+    function closeCelebration() {
+      document.getElementById('celebration').classList.remove('show');
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Util
+    // ═══════════════════════════════════════════════════
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // ─── Init ───
+    loadLevel(Math.min(Progress.getLevel('variables') + 1, LEVELS.length));
+  </script>
+</body>
+</html>
