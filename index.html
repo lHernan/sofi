@@ -326,14 +326,14 @@
         }
 
         card.innerHTML = `
-          ${cat.soon ? '<span class="soon-badge">Próximamente</span>' : ''}
+          ${(cat.soon && !unlocked) ? '<span class="soon-badge">Próximamente</span>' : ''}
           <div class="cat-icon">${cat.icon}</div>
           <div class="cat-content">
             <div class="cat-name">${cat.name}</div>
             <div class="cat-desc">${cat.desc}</div>
             <div class="cat-dots">${dots}</div>
           </div>
-          <div class="cat-arrow">${(unlocked && !cat.soon) ? '›' : ''}</div>
+          <div class="cat-arrow">${(unlocked && cat.href) ? '›' : ''}</div>
         `;
 
         if (!unlocked) {
