@@ -649,9 +649,13 @@
       Progress.setLevel('variables', currentLevelNum);
       const isLast = currentLevelNum === LEVELS.length;
 
+      if (isLast) {
+        Progress.unlock('condicionales');
+      }
+
       let sub = `¡Llegaste a la meta con ${vars.energia} de energía!`;
       if (vars.monedas > 0) sub += ` Recogiste ${vars.monedas} 💰.`;
-      if (isLast) sub += '<br>🌟 ¡Completaste el mundo de Variables!';
+      if (isLast) sub += '<br>🌟 ¡Completaste el mundo de Variables! (Mundo de Condicionales desbloqueado)';
 
       document.getElementById('celebTitle').textContent = isLast ? '🏆 ¡Experta en Variables!' : '⭐ ¡Nivel Completado!';
       document.getElementById('celebSub').innerHTML = sub;

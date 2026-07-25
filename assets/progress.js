@@ -22,6 +22,14 @@ const Progress = (() => {
   return {
     isUnlocked(id) {
       if (id === 'algoritmos') return true; // Always open
+      
+      // Self-healing / automatic unlock based on completed levels
+      const levels = load(KEY_LEVELS, {});
+      if (id === 'variables'     && (levels['algoritmos']    || 0) >= 3) return true;
+      if (id === 'condicionales' && (levels['variables']     || 0) >= 4) return true;
+      if (id === 'bucles'        && (levels['condicionales'] || 0) >= 4) return true;
+      if (id === 'tipos'         && (levels['bucles']        || 0) >= 4) return true;
+
       return load(KEY_UNLOCKED, []).includes(id);
     },
 
